@@ -1,0 +1,18 @@
+{{define "books"}} 
+<table>
+  <tr>
+    <th>Book Name</th>
+    <th>Author</th>
+    <th>Edition</th>
+    <th>Pages</th>
+  </tr>
+  {{ range . }}
+  <tr id="row-{{ .ID }}">
+    <th> {{ .name }} </th>
+    <th> {{ .author }} </th>
+    <th> {{ .edition }} </th>
+    <th> {{ .pages }} </th>
+  </tr>
+  {{ end }}
+</table>
+{{ end }}

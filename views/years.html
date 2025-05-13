@@ -1,0 +1,12 @@
+{{define "years"}} 
+<table>
+  <tr>
+    <th>Years</th>
+  </tr>
+  {{ range . }}
+  <tr id="row-{{ .ID }}">
+    <th> {{ .year }} </th>
+  </tr>
+  {{ end }}
+</table>
+{{ end }}

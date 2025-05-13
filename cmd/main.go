@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	// "github.com/labstack/echo/v4/middleware"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -23,12 +23,12 @@ import (
 // More on these "tags" like `bson:"_id,omitempty"`: https://go.dev/wiki/Well-known-struct-tags
 type BookStore struct {
 	MongoID     primitive.ObjectID `bson:"_id,omitempty"`
-	ID          string
-	BookName    string
-	BookAuthor  string
-	BookEdition string
-	BookPages   string
-	BookYear    string
+	ID          string             `bson:"id"      json:"id"`
+    BookName    string             `bson:"name"    json:"name"`       
+    BookAuthor  string             `bson:"author"  json:"author"`     
+    BookEdition string             `bson:"edition" json:"edition"`    
+    BookPages   string                `bson:"pages"   json:"pages"`      
+    BookYear    string                `bson:"year"    json:"year"`             
 }
 
 // Wraps the "Template" struct to associate a necessary method
@@ -166,11 +166,34 @@ func findAllBooks(coll *mongo.Collection) []map[string]interface{} {
 	var ret []map[string]interface{}
 	for _, res := range results {
 		ret = append(ret, map[string]interface{}{
-			"ID":          res.MongoID.Hex(),
-			"BookName":    res.BookName,
-			"BookAuthor":  res.BookAuthor,
-			"BookEdition": res.BookEdition,
-			"BookPages":   res.BookPages,
+			"id":          res.MongoID.Hex(),
+			"name":    res.BookName,
+			"author":  res.BookAuthor,
+			"edition": res.BookEdition,
+			"pages":   res.BookPages,
+		})
+	}
+
+	return ret
+}
+
+// API Search
+func findAllBooksApi(coll *mongo.Collection) []map[string]interface{} {
+	cursor, err := coll.Find(context.TODO(), bson.D{{}})
+	var results []BookStore
+	if err = cursor.All(context.TODO(), &results); err != nil {
+		panic(err)
+	}
+
+	var ret []map[string]interface{}
+	for _, res := range results {
+		ret = append(ret, map[string]interface{}{
+			"id":      res.MongoID.Hex(),
+			"name":    res.BookName,
+			"author":  res.BookAuthor,
+			"pages":   res.BookPages,
+			"edition": res.BookEdition,
+			"year": res.BookYear,
 		})
 	}
 
@@ -184,23 +207,61 @@ func findAllAuthors(coll *mongo.Collection) []map[string]interface{} {
 		panic(err)
 	}
 
-	authorsM := make(map[string]bool)
+	authorsM := make(map[string]int)
 	var ret []map[string]interface{}
 
 	for _, res := range results {
-		if _, exists := authorsM[res.BookAuthor]; !exists {
-			authorsM[res.BookAuthor] = true
+        authorsM[res.BookAuthor]++
+    }
+
+	for author, count := range authorsM {
+		var id string
+		for _, res := range results {
+			if res.BookAuthor == author {
+                id = res.MongoID.Hex()
+                break
+            }
+		}
+
+		ret = append(ret, map[string]interface{}{
+			"id":          id,
+			"author":  author,
+			"amountbooks":   count,
+		})
+		
+	}
+
+	return ret
+}
+
+
+
+func findAllYears(coll *mongo.Collection) []map[string]interface{} {
+	cursor, err := coll.Find(context.TODO(), bson.D{{}})
+	var results []BookStore
+	if err = cursor.All(context.TODO(), &results); err != nil {
+		panic(err)
+	}
+
+	yearsM := make(map[string]bool)
+	var ret []map[string]interface{}
+
+	for _, res := range results {
+		if _, exists := yearsM[res.BookYear]; !exists {
+			yearsM[res.BookYear] = true
 
 			ret = append(ret, map[string]interface{}{
-				"ID":          res.MongoID.Hex(),
-				"BookAuthor":  res.BookAuthor,
-				"AmountBooks":   1,
+				"id":        res.MongoID.Hex(),
+				"year":  res.BookYear,
 			})
 		}
 	}
 
 	return ret
 }
+
+
+
 
 func main() {
 	// fmt.Println("Station 0")
@@ -241,7 +302,7 @@ func main() {
 
 	// Log the requests. Please have a look at echo's documentation on more
 	// middleware
-	e.Use(middleware.Logger())
+	// e.Use(middleware.Logger())
 
 	e.Static("/css", "css")
 
@@ -255,16 +316,17 @@ func main() {
 
 	e.GET("/books", func(c echo.Context) error {
 		books := findAllBooks(coll)
-		return c.Render(200, "book-table", books)
+		return c.Render(200, "books", books)
 	})
 
 	e.GET("/authors", func(c echo.Context) error {
 		authors := findAllAuthors(coll)
-		return c.Render(200, "author-table", authors)
+		return c.Render(200, "authors", authors)
 	})
 
 	e.GET("/years", func(c echo.Context) error {
-		return c.NoContent(http.StatusNoContent)
+		years := findAllYears(coll)
+		return c.Render(200, "years", years)
 	})
 
 	e.GET("/search", func(c echo.Context) error {
@@ -282,9 +344,112 @@ func main() {
 	// It specifies the expected returned codes for each type of request
 	// method.
 	e.GET("/api/books", func(c echo.Context) error {
-		books := findAllBooks(coll)
+		books := findAllBooksApi(coll)
 		return c.JSON(http.StatusOK, books)
 	})
+
+	// own POST, Update, Delete Methods -> Malaka lets go
+
+	// Some ideas for Post: https://echo.labstack.com/docs/request and https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Methods/POST 
+	e.POST("/api/books", func(ctx echo.Context) error {
+		bookstore := new(BookStore)
+
+		// https://echo.labstack.com/docs/binding 
+		if err := ctx.Bind(bookstore); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+
+		// debug
+		fmt.Printf("\nPOST: Empfangene Daten - ", bookstore)
+
+		if bookstore.ID == "" {                       
+			bookstore.ID = primitive.NewObjectID().Hex()
+		}
+
+		
+
+		// check for duplicated
+		// bson info: https://pkg.go.dev/go.mongodb.org/mongo-driver/bson 
+		filterDup := bson.M{
+			"id":      bookstore.ID,
+			"name": bookstore.BookName,
+			"author": bookstore.BookAuthor,
+			"pages": bookstore.BookPages,
+			"edition": bookstore.BookEdition,
+			"year": bookstore.BookYear,
+		}
+
+		// Find duplic. mongo https://www.mongodb.com/docs/manual/reference/method/db.collection.countDocuments/#:~:text=count()%20%2C%20db.-,collection.,documents%20in%20a%20sharded%20cluster.
+		n, err := coll.CountDocuments(context.TODO(), filterDup)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		if n > 0 {
+			return echo.NewHTTPError(http.StatusConflict, "duplicate")
+		}
+
+		_, err = coll.InsertOne(context.TODO(), bookstore)
+
+		if err != nil {
+        	return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+    	}
+		fmt.Printf("\nPOST: DONE ")
+		return ctx.JSON(http.StatusCreated, bookstore)
+	})
+
+
+	// PUT
+	e.PUT("/api/books/:id", func(ctx echo.Context) error {
+		id := ctx.Param("id")
+
+		bookstore := new(BookStore)
+		if err := ctx.Bind(bookstore); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+
+		// debug
+		fmt.Printf("\nPUT: Empfangene Daten - ", bookstore)
+
+		// Update: https://joshua-etim.medium.com/how-i-update-documents-in-mongodb-with-golang-94485dbe54f7 
+		// $set : https://www.mongodb.com/docs/manual/reference/operator/update/set/
+		updater := bson.M{"$set": bson.M{}}
+		if bookstore.BookName != "" { updater["$set"].(bson.M)["name"] = bookstore.BookName}
+		if bookstore.BookAuthor != "" { updater["$set"].(bson.M)["author"] = bookstore.BookAuthor}
+		if bookstore.BookEdition != "" { updater["$set"].(bson.M)["edition"] = bookstore.BookEdition}
+		if bookstore.BookPages != "" { updater["$set"].(bson.M)["pages"] = bookstore.BookPages}
+		if bookstore.BookYear != "" { updater["$set"].(bson.M)["year"] = bookstore.BookYear}
+
+		updateResult, err := coll.UpdateOne(context.TODO(), bson.M{"id": id}, updater)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		if updateResult.MatchedCount == 0 {
+			return echo.NewHTTPError(http.StatusNotFound, "Not found id")
+		}
+
+		fmt.Printf("\nPUT: DONE ")
+		return ctx.NoContent(http.StatusOK)
+	})
+
+	// DELETE
+	e.DELETE("/api/books/:id", func(ctx echo.Context) error {
+		id := ctx.Param("id")
+		delete_res, _ := coll.DeleteOne(context.TODO(), bson.M{"id": id})
+
+		// debug
+		fmt.Printf("\nDELETE: Empfangene Daten - ", id)
+
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		if delete_res.DeletedCount == 0 {
+			return echo.NewHTTPError(http.StatusNotFound, "Not found id")
+		}
+
+		fmt.Printf("\nDELETE: DONE ")
+		return ctx.NoContent(http.StatusOK)
+	})
+
 
 	// We start the server and bind it to port 3030. For future references, this
 	// is the application's port and not the external one. For this first exercise,
