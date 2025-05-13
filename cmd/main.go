@@ -177,7 +177,34 @@ func findAllBooks(coll *mongo.Collection) []map[string]interface{} {
 	return ret
 }
 
+func findAllAuthors(coll *mongo.Collection) []map[string]interface{} {
+	cursor, err := coll.Find(context.TODO(), bson.D{{}})
+	var results []BookStore
+	if err = cursor.All(context.TODO(), &results); err != nil {
+		panic(err)
+	}
+
+	authorsM := make(map[string]bool)
+	var ret []map[string]interface{}
+
+	for _, res := range results {
+		if _, exists := authorsM[res.BookAuthor]; !exists {
+			authorsM[res.BookAuthor] = true
+
+			ret = append(ret, map[string]interface{}{
+				"ID":          res.MongoID.Hex(),
+				"BookAuthor":  res.BookAuthor,
+				"AmountBooks":   1,
+			})
+		}
+	}
+
+	return ret
+}
+
 func main() {
+	// fmt.Println("Station 0")
+
 	// Connect to the database. Such defer keywords are used once the local
 	// context returns; for this case, the local context is the main function
 	// By user defer function, we make sure we don't leave connections
@@ -185,8 +212,12 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// fmt.Println("Station 1")
+
 	// TODO: make sure to pass the proper username, password, and port
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+
+	// fmt.Println("Station 2")
 
 	// This is another way to specify the call of a function. You can define inline
 	// functions (or anonymous functions, similar to the behavior in Python)
@@ -228,7 +259,8 @@ func main() {
 	})
 
 	e.GET("/authors", func(c echo.Context) error {
-		return c.NoContent(http.StatusNoContent)
+		authors := findAllAuthors(coll)
+		return c.Render(200, "author-table", authors)
 	})
 
 	e.GET("/years", func(c echo.Context) error {
