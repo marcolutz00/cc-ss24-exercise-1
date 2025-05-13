@@ -24,7 +24,7 @@ import (
 type BookStore struct {
 	MongoID     primitive.ObjectID `bson:"_id,omitempty"`
 	ID          string             `bson:"id"      json:"id"`
-    BookName    string             `bson:"name"    json:"name"`       
+    BookName    string             `bson:"title"    json:"title"`       
     BookAuthor  string             `bson:"author"  json:"author"`     
     BookEdition string             `bson:"edition" json:"edition"`    
     BookPages   string                `bson:"pages"   json:"pages"`      
@@ -166,8 +166,8 @@ func findAllBooks(coll *mongo.Collection) []map[string]interface{} {
 	var ret []map[string]interface{}
 	for _, res := range results {
 		ret = append(ret, map[string]interface{}{
-			"id":          res.MongoID.Hex(),
-			"name":    res.BookName,
+			"id":          res.ID,
+			"title":    res.BookName,
 			"author":  res.BookAuthor,
 			"edition": res.BookEdition,
 			"pages":   res.BookPages,
@@ -188,8 +188,8 @@ func findAllBooksApi(coll *mongo.Collection) []map[string]interface{} {
 	var ret []map[string]interface{}
 	for _, res := range results {
 		ret = append(ret, map[string]interface{}{
-			"id":      res.MongoID.Hex(),
-			"name":    res.BookName,
+			"id":      res.ID,
+			"title":    res.BookName,
 			"author":  res.BookAuthor,
 			"pages":   res.BookPages,
 			"edition": res.BookEdition,
@@ -372,7 +372,7 @@ func main() {
 		// bson info: https://pkg.go.dev/go.mongodb.org/mongo-driver/bson 
 		filterDup := bson.M{
 			"id":      bookstore.ID,
-			"name": bookstore.BookName,
+			"title": bookstore.BookName,
 			"author": bookstore.BookAuthor,
 			"pages": bookstore.BookPages,
 			"edition": bookstore.BookEdition,
@@ -413,7 +413,7 @@ func main() {
 		// Update: https://joshua-etim.medium.com/how-i-update-documents-in-mongodb-with-golang-94485dbe54f7 
 		// $set : https://www.mongodb.com/docs/manual/reference/operator/update/set/
 		updater := bson.M{"$set": bson.M{}}
-		if bookstore.BookName != "" { updater["$set"].(bson.M)["name"] = bookstore.BookName}
+		if bookstore.BookName != "" { updater["$set"].(bson.M)["title"] = bookstore.BookName}
 		if bookstore.BookAuthor != "" { updater["$set"].(bson.M)["author"] = bookstore.BookAuthor}
 		if bookstore.BookEdition != "" { updater["$set"].(bson.M)["edition"] = bookstore.BookEdition}
 		if bookstore.BookPages != "" { updater["$set"].(bson.M)["pages"] = bookstore.BookPages}
